@@ -60,6 +60,5 @@ Known Gaps and Judicial Plan
   - Implement deterministic ChiefJustice rules (security override, fact supremacy,
     dissent requirement) and serialize an `AuditReport` to Markdown.
 
-NOTE: This file is stored as plain text with a `.pdf` extension for interim
-submission. It can be exported to a true PDF via your preferred tooling.
+
 
