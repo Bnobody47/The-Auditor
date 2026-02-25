@@ -54,6 +54,10 @@ report.
 - `rubric/week2_rubric.json` – Automaton Auditor rubric (Constitution).
 - `reports/interim_report.pdf` – Textual interim architecture report for submission.
 - `reports/stategraph_architecture.mmd` – Mermaid diagram of the StateGraph architecture.
+- `pyproject.toml` – Primary dependency and project metadata (used by `uv`).
+- `requirements.txt` – Flat dependency list for `pip` users.
+- `uv.lock` – Lockfile for reproducible installs with `uv`.
+- `.env.example` – Template for required environment variables.
 
 ### End-to-end run example
 
