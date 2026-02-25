@@ -12,6 +12,19 @@ from .nodes.judges import prosecutor_node, defense_node, tech_lead_node
 from .nodes.justice import context_builder_node, evidence_aggregator_node, chief_justice_node
 
 
+def _evidence_health_router(state: AgentState) -> str:
+    """
+    Simple conditional router for error handling.
+
+    If no evidences were collected at all (e.g., missing repo/PDF), skip the
+    Judges and go directly to the Chief Justice so it can emit a degraded
+    report instead of failing mid-graph.
+    """
+    evidences = state.get("evidences", {})
+    has_any = any(bucket for bucket in evidences.values())
+    return "ok" if has_any else "missing_evidence"
+
+
 def build_graph() -> StateGraph[AgentState]:
     """
     Construct the Automaton Auditor LangGraph.
@@ -56,7 +69,19 @@ def build_graph() -> StateGraph[AgentState]:
     graph.add_edge("doc_analyst", "evidence_aggregator")
     graph.add_edge("vision_inspector", "evidence_aggregator")
 
-    # Fan-out to Judges
+    # Conditional branch after aggregation:
+    # - if we have at least one evidence item, fan-out to Judges
+    # - otherwise, skip directly to Chief Justice for a degraded report
+    graph.add_conditional_edges(
+        "evidence_aggregator",
+        _evidence_health_router,
+        {
+            "ok": "prosecutor",
+            "missing_evidence": "chief_justice",
+        },
+    )
+
+    # Fan-out to Judges (normal path)
     graph.add_edge("evidence_aggregator", "prosecutor")
     graph.add_edge("evidence_aggregator", "defense")
     graph.add_edge("evidence_aggregator", "tech_lead")

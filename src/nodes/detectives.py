@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Dict, List
 
 from ..state import AgentState, Evidence
@@ -44,7 +45,24 @@ def repo_investigator_node(state: AgentState) -> AgentState:
     - Safe tool engineering
     - Structured judge outputs
     """
-    repo_url = state["repo_url"]
+    repo_url = state.get("repo_url")
+    evidences = state.get("evidences", {})
+
+    if not repo_url:
+        fallback = Evidence(
+            goal="Repository availability",
+            found=False,
+            content=None,
+            location="repo_url",
+            rationale="No repo_url provided in AgentState; RepoInvestigator could not run.",
+            confidence=0.2,
+        )
+        state["evidences"] = _append_evidences(
+            evidences=evidences,
+            criterion_id=FOR_CODE_CRITERION,
+            new_items=[fallback],
+        )
+        return state
 
     git_ev = analyze_git_history(repo_url)
     state_ev = analyze_state_management(repo_url)
@@ -56,7 +74,6 @@ def repo_investigator_node(state: AgentState) -> AgentState:
         git_ev + state_ev + graph_ev + tool_ev + structured_ev
     )
 
-    evidences = state.get("evidences", {})
     state["evidences"] = _append_evidences(
         evidences=evidences,
         criterion_id=FOR_CODE_CRITERION,
@@ -73,15 +90,32 @@ def doc_analyst_node(state: AgentState) -> AgentState:
     - Theoretical depth around Dialectical Synthesis, Fan-In/Fan-Out, Metacognition, etc.
     - Host analysis accuracy: verified vs hallucinated file paths.
     """
-    pdf_path = state["pdf_path"]
-    repo_url = state["repo_url"]
+    pdf_path = state.get("pdf_path")
+    repo_url = state.get("repo_url", "")
+
+    evidences = state.get("evidences", {})
+
+    if not pdf_path or not Path(pdf_path).exists():
+        fallback = Evidence(
+            goal="PDF report availability",
+            found=False,
+            content=None,
+            location=str(pdf_path or "pdf_path"),
+            rationale="PDF path missing or file does not exist; DocAnalyst could not inspect the report.",
+            confidence=0.2,
+        )
+        state["evidences"] = _append_evidences(
+            evidences=evidences,
+            criterion_id=FOR_DOCS_CRITERION,
+            new_items=[fallback],
+        )
+        return state
 
     theoretical_ev = analyze_theoretical_depth(pdf_path)
     host_accuracy_ev = analyze_host_accuracy(pdf_path=pdf_path, repo_url=repo_url)
 
     all_evidence: List[Evidence] = theoretical_ev + host_accuracy_ev
 
-    evidences = state.get("evidences", {})
     state["evidences"] = _append_evidences(
         evidences=evidences,
         criterion_id=FOR_DOCS_CRITERION,
@@ -98,15 +132,32 @@ def vision_inspector_node(state: AgentState) -> AgentState:
     whether the diagrams clearly depict parallel Detectives/Judges and Chief Justice
     synthesis, or just a linear pipeline.
     """
-    pdf_path = state["pdf_path"]
+    pdf_path = state.get("pdf_path")
+    evidences = state.get("evidences", {})
+
+    if not pdf_path or not Path(pdf_path).exists():
+        fallback = Evidence(
+            goal="Diagram availability",
+            found=False,
+            content=None,
+            location=str(pdf_path or "pdf_path"),
+            rationale="PDF path missing or file does not exist; VisionInspector could not extract diagrams.",
+            confidence=0.1,
+        )
+        state["evidences"] = _append_evidences(
+            evidences=evidences,
+            criterion_id=FOR_VISUAL_CRITERION,
+            new_items=[fallback],
+        )
+        return state
 
     visual_ev = analyze_architecture_diagrams(pdf_path)
 
-    evidences = state.get("evidences", {})
     state["evidences"] = _append_evidences(
         evidences=evidences,
         criterion_id=FOR_VISUAL_CRITERION,
         new_items=visual_ev,
     )
     return state
+
 
