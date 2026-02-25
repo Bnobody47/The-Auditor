@@ -7,29 +7,52 @@ This interim report documents the current design and implementation progress of 
 (`Evidence`, `JudicialOpinion`, `AgentState`), sandboxed git tooling, and a LangGraph
 StateGraph wiring the Detective layer in parallel with a synchronization node.
 
-Architecture Decisions So Far
------------------------------
-- Pydantic over dicts:
-  - Pydantic `BaseModel` is used for `Evidence` and `JudicialOpinion` to ensure
-    strongly-typed, validated data exchanged between nodes.
-  - `AgentState` is a `TypedDict` with `Annotated` reducers (`operator.add`,
+Architecture Decisions So Far (with Trade-offs)
+-----------------------------------------------
+- Pydantic + TypedDict over plain dicts:
+  - Decision: Pydantic `BaseModel` is used for `Evidence` and `JudicialOpinion`
+    to ensure strongly-typed, validated data exchanged between nodes, while
+    `AgentState` is a `TypedDict` with `Annotated` reducers (`operator.add`,
     `operator.ior`) so parallel branches can safely merge lists and dicts.
+  - Trade-offs: Pydantic introduces runtime validation overhead and a stronger
+    coupling to the data model, but in this governance setting the clarity and
+    safety of well-typed evidence/opinion objects outweighs minor performance
+    costs. Alternatives considered:
+      * Pure dict-based state: rejected as too brittle for parallel reducers and
+        difficult to validate at graph boundaries.
+      * A single monolithic Pydantic state model: rejected to keep LangGraph
+        integration simple and to avoid large, tightly coupled schemas.
 
-- AST & Repo Forensics:
-  - `src/tools/repo_tools.py` performs sandboxed git clone operations inside a
-    `tempfile.TemporaryDirectory` and runs `git log --oneline --reverse` to build
-    the commit narrative.
-  - Dedicated placeholders for AST-based analysis of state and graph wiring are
-    defined and will be fully implemented for the final submission.
+- AST-based analysis over regex scanning:
+  - Decision: For repo forensics the design favors Python's `ast` module (and
+    possibly tree-sitter) over regex-based searches to understand graph wiring
+    and state structures.
+  - Trade-offs: AST parsing is more complex to implement and slightly heavier
+    than string matching, but it is robust to formatting changes and avoids
+    false positives (e.g., comments mentioning `StateGraph`). Regex-based
+    scanning was considered for speed and simplicity, but rejected because the
+    rubric explicitly demands structural verification, not string presence.
 
-- PDF & Doc Forensics:
-  - `src/tools/doc_tools.py` defines entry points for a RAG-lite PDF ingestion
-    pipeline. Docling (or similar) will be integrated to extract text and support
-    targeted queries about Dialectical Synthesis, Fan-In/Fan-Out, and Metacognition.
+- Sandboxed git tooling:
+  - Decision: `src/tools/repo_tools.py` performs git clone operations inside a
+    `tempfile.TemporaryDirectory` and runs `git log --oneline --reverse` to
+    build the commit narrative, never touching the live working tree.
+  - Trade-offs: Temporary directories require careful lifetime management and
+    slightly more code, but they sharply reduce the blast radius of cloning
+    untrusted repositories. The alternative of cloning directly into the
+    workspace with `os.system("git clone ...")` was rejected as a security
+    liability and explicitly violates the rubric's safe tooling requirements.
 
-- Sandboxing Strategy:
-  - All git operations are executed in a temporary directory, never the live
-    working tree, to reduce security risk when cloning arbitrary repositories.
+- RAG-lite PDF forensics:
+  - Decision: `src/tools/doc_tools.py` is structured around ingesting the PDF
+    once and then querying for concepts like Dialectical Synthesis, Fan-In/
+    Fan-Out, and Metacognition, instead of dumping the whole report into a
+    single LLM call.
+  - Trade-offs: A RAG-lite approach adds complexity (chunking, indexing, and
+    targeted queries) but keeps context windows small and makes it easier to
+    cite specific sentences as Evidence. A naive single-prompt summarizer was
+    rejected because it would be hard to ground specific forensic claims in
+    concrete text spans.
 
 StateGraph Flow (Detective Focus)
 ---------------------------------
@@ -43,22 +66,109 @@ StateGraph Flow (Detective Focus)
     layer. Because `evidences` uses an `operator.ior` reducer, each Detective can
     contribute evidence without overwriting others.
 
-Known Gaps and Judicial Plan
------------------------------
+Known Gaps, Risks, and Forward Plan
+-----------------------------------
 - RepoInvestigator:
-  - Implement AST parsing to confirm `AgentState` structure, reducers, and
-    StateGraph fan-out/fan-in wiring.
-- DocAnalyst:
-  - Implement PDF parsing and file-path extraction; cross-reference claims in the
-    report with actual repository contents to flag hallucinated paths.
-- VisionInspector:
-  - Implement image extraction and multimodal analysis to classify diagrams and
-    verify that parallel Detectives/Judges and Chief Justice synthesis are shown.
-- Judicial Layer & Chief Justice:
-  - Upgrade the current placeholder judges into LLM-backed personas using
-    structured output (`JudicialOpinion` schema).
-  - Implement deterministic ChiefJustice rules (security override, fact supremacy,
-    dissent requirement) and serialize an `AuditReport` to Markdown.
+  - Planned work: Implement AST parsing to confirm `AgentState` structure,
+    reducers, and StateGraph fan-out/fan-in wiring, and to capture the exact
+    graph definition block as Evidence.
+  - Risks/failure modes: AST visitors might miss dynamically constructed graphs
+    or variant patterns of `add_edge` usage, leading to false negatives about
+    parallelism. Mitigation: start with a narrow set of supported patterns and
+    clearly document assumptions in the evidence rationale.
 
+- DocAnalyst:
+  - Planned work: Implement PDF parsing and file-path extraction; cross-reference
+    claims in the report with actual repository contents to flag hallucinated
+    paths and keyword-dropping around core concepts.
+  - Risks/failure modes: OCR/parse errors or unusual report formatting could hide
+    file paths and key phrases, causing under-reporting of issues. Mitigation:
+    keep raw extracted text snippets in Evidence and allow manual inspection
+    during debugging.
+
+- VisionInspector:
+  - Planned work: Implement image extraction and multimodal analysis to classify
+    diagrams and verify that parallel Detectives/Judges and Chief Justice
+    synthesis are shown rather than a linear pipeline.
+  - Risks/failure modes: Diagrams with dense notation or small fonts may be
+    misclassified; absence of diagrams must not be treated as implicit success.
+    Mitigation: treat vision-based findings as complementary and explicitly
+    record when no diagrams are present.
+
+- Judicial Layer & Chief Justice:
+  - Planned work: Upgrade the current placeholder judges into LLM-backed personas
+    using structured output (`JudicialOpinion` schema) and implement deterministic
+    ChiefJustice rules (security override, fact supremacy, dissent requirement)
+    that synthesize scores into an `AuditReport` serialized to Markdown.
+  - Risks/failure modes: Poorly separated prompts could lead to persona collusion
+    (near-identical opinions) or hallucinated citations. Mitigation: enforce
+    `.with_structured_output(JudicialOpinion)` with strict validation and retries,
+    and design prompts to emphasize distinct philosophies.
+
+Sequencing and Prioritization
+-----------------------------
+1. **Stabilize Forensic Foundation**
+   - Implement AST-based RepoInvestigator logic and robust PDF ingestion,
+     because all higher-level judgments depend on trustworthy evidence.
+2. **Harden Judicial Personas**
+   - Introduce structured LLM judges and tune prompts until they produce
+     meaningfully divergent opinions with grounded citations.
+3. **Implement Chief Justice Rules**
+   - Encode security overrides, fact supremacy, and dissent requirements as
+     deterministic Python logic and wire score variance checks.
+4. **Enhance Diagrams and Vision**
+   - Add and integrate StateGraph diagrams and VisionInspector once textual
+     evidence and judicial reasoning are reliable.
+
+StateGraph Architecture Diagram
+-------------------------------
+The current architecture is captured directly in this report as a Mermaid diagram:
+
+```mermaid
+flowchart TD
+    %% Entry and rubric loading (AgentState)
+    A[context_builder<br/>Load rubric dimensions<br/>(AgentState)] -->|AgentState| B{Detective fan-out}
+
+    %% Detectives in parallel (evidence collection)
+    B -->|AgentState + repo_url| C[repo_investigator<br/>Git, state, graph, tools]
+    B -->|AgentState + pdf_path| D[doc_analyst<br/>PDF & report forensics]
+    B -->|AgentState + pdf_path| E[vision_inspector<br/>Diagram forensics]
+
+    %% Evidence aggregation (Dict[str, List[Evidence]] with operator.ior)
+    C -->|evidences[github_repo]| F[evidence_aggregator<br/>Fan-in evidences<br/>(Dict[str, List[Evidence]] · operator.ior)]
+    D -->|evidences[pdf_report]| F
+    E -->|evidences[pdf_images]| F
+
+    %% Judicial fan-out (List[JudicialOpinion] with operator.add)
+    F -->|evidences + rubric_dimensions| G[prosecutor<br/>Critical lens<br/>JudicialOpinion list]
+    F -->|evidences + rubric_dimensions| H[defense<br/>Optimistic lens<br/>JudicialOpinion list]
+    F -->|evidences + rubric_dimensions| I[tech_lead<br/>Pragmatic lens<br/>JudicialOpinion list]
+
+    %% Chief Justice and termination with simple error path
+    G -->|opinions (Prosecutor)| J[chief_justice<br/>Deterministic synthesis<br/>AuditReport → Markdown]
+    H -->|opinions (Defense)| J
+    I -->|opinions (TechLead)| J
+    J -->|final_report (Markdown)| K[[END]]
+
+    %% Example conditional/error handling (planned)
+    J -->|if evidence_missing or security_violation| L{{Re-evaluate evidence / cap score}}
+    L -.fallback.-> K
+```
+
+This diagram visualizes:
+- Entry at `context_builder` with an `AgentState` object and parallel fan-out to
+  the three Detectives.
+- Edge labels indicating which parts of `AgentState` (e.g., `repo_url`,
+  `pdf_path`, `evidences`, `rubric_dimensions`) are consumed or produced at each
+  step.
+- Fan-in at `evidence_aggregator` with `evidences` reducers to merge forensic
+  data from code, docs, and diagrams.
+- Parallel fan-out to Prosecutor, Defense, and Tech Lead judges, each consuming
+  the shared evidence and rubric dimensions and emitting `JudicialOpinion`
+  objects.
+- Fan-in at `chief_justice`, which consumes all opinions, applies deterministic
+  rules, and emits a `final_report` Markdown string to the `END` state, with a
+  planned conditional path for re-evaluation or score capping when security
+  violations or missing evidence are detected.
 
 
