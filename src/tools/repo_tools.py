@@ -21,6 +21,12 @@ def _run_git_log(repo_dir: Path) -> Tuple[str, str]:
 
 
 def _clone_repo_to_temp(repo_url: str) -> Tuple[Path, str]:
+    """
+    Clone the target repository into a sandboxed temporary directory.
+
+    Returns the target path and any stderr emitted by git so callers can surface
+    precise failure reasons in Evidence objects.
+    """
     tmp_dir = tempfile.TemporaryDirectory()
     target = Path(tmp_dir.name) / "repo"
     proc = subprocess.run(
@@ -40,20 +46,32 @@ def analyze_git_history(repo_url: str) -> List[Evidence]:
     - summarizes commit count and progression narrative
     """
     repo_dir, clone_err = _clone_repo_to_temp(repo_url)
+    goal = "Git forensic analysis: commit progression"
+
+    if clone_err or not repo_dir.exists():
+        # Surface clone failures explicitly instead of silently degrading.
+        return [
+            Evidence(
+                goal=goal,
+                found=False,
+                content=None,
+                location=str(repo_dir),
+                rationale=f"git clone failed or produced no repository directory. stderr: {clone_err[:400]}",
+                confidence=0.2,
+            )
+        ]
+
     log_text, log_err = _run_git_log(repo_dir)
     commits = [line for line in log_text.splitlines() if line.strip()]
 
-    goal = "Git forensic analysis: commit progression"
-    found = len(commits) > 0 and not clone_err and not log_err
+    found = len(commits) > 0 and not log_err
     rationale_parts = []
-    if clone_err:
-        rationale_parts.append(f"git clone reported: {clone_err[:300]}")
     if log_err:
         rationale_parts.append(f"git log reported: {log_err[:300]}")
     if commits:
         rationale_parts.append(f"Found {len(commits)} commits using git log --oneline --reverse.")
     if not rationale_parts:
-        rationale_parts.append("git log produced no commits; repository may be empty or clone failed.")
+        rationale_parts.append("git log produced no commits; repository may be empty or history is shallow.")
 
     return [
         Evidence(
@@ -104,6 +122,7 @@ def analyze_state_management(repo_url: str) -> List[Evidence]:
     has_evidence_model = False
     has_opinion_model = False
     has_agent_state = False
+    has_reducers = False
 
     for node in ast.walk(module):
         if isinstance(node, ast.ClassDef):
@@ -115,6 +134,13 @@ def analyze_state_management(repo_url: str) -> List[Evidence]:
             if node.name == "AgentState":
                 has_agent_state = True
 
+    # Second pass: look for Annotated[...] with operator.add / operator.ior
+    for node in ast.walk(module):
+        if isinstance(node, ast.Subscript) and getattr(getattr(node.value, "id", None), "lower", lambda: None)() == "annotated":
+            text = ast.get_source_segment(Path(path).read_text(encoding="utf-8"), node) or ""
+            if "operator.add" in text or "operator.ior" in text:
+                has_reducers = True
+
     summary = []
     if has_evidence_model:
         summary.append("Evidence model (BaseModel) detected.")
@@ -122,8 +148,10 @@ def analyze_state_management(repo_url: str) -> List[Evidence]:
         summary.append("JudicialOpinion model (BaseModel) detected.")
     if has_agent_state:
         summary.append("AgentState TypedDict detected.")
+    if has_reducers:
+        summary.append("Annotated reducers (operator.add / operator.ior) detected in state.")
 
-    found = has_evidence_model and has_opinion_model and has_agent_state
+    found = has_evidence_model and has_opinion_model and has_agent_state and has_reducers
 
     return [
         Evidence(

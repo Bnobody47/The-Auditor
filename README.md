@@ -24,7 +24,7 @@ report.
 
 2. **Install dependencies**
 
-   With `uv` (using `pyproject.toml`):
+   With `uv` (recommended, using `pyproject.toml` and `uv.lock`):
 
    ```bash
    uv sync
@@ -38,26 +38,42 @@ report.
 
 3. **Environment variables**
 
-   - Create a `.env` file (not committed) with your LLM provider API keys
-     (e.g., OpenAI, Gemini).
+   - Copy `.env.example` to `.env` and fill in your LLM provider API keys
+     (e.g., OpenAI, Gemini) and LangSmith credentials.
    - Ensure `LANGCHAIN_TRACING_V2=true` is set if you want LangSmith-style tracing.
-   - See `.env.example` for the full list of expected variables.
 
-### Project layout (work in progress)
+### Project layout
 
- - `src/state.py` – Pydantic models and `AgentState` TypedDict with reducers.
- - `src/tools/repo_tools.py` – Sandboxed git tooling and placeholders for AST-based analysis.
- - `src/tools/doc_tools.py` – PDF/RAG-lite tooling scaffolding.
- - `src/nodes/detectives.py` – RepoInvestigator, DocAnalyst, VisionInspector nodes.
- - `src/graph.py` – LangGraph `StateGraph` wiring Detectives (and placeholder Judges/Chief Justice).
- - `rubric/week2_rubric.json` – Automaton Auditor rubric (Constitution).
- - `reports/interim_report.pdf` – Textual interim architecture report for submission.
+- `src/state.py` – Pydantic models and `AgentState` TypedDict with reducers.
+- `src/tools/repo_tools.py` – Sandboxed git tooling and AST/text-based forensic analysis.
+- `src/tools/doc_tools.py` – PDF ingestion into chunks and theoretical-depth/host-accuracy analysis.
+- `src/nodes/detectives.py` – RepoInvestigator, DocAnalyst, VisionInspector nodes operating on `AgentState`.
+- `src/nodes/judges.py` – Placeholder Prosecutor/Defense/TechLead judge nodes (to be upgraded with LLMs).
+- `src/nodes/justice.py` – Context builder, evidence aggregator, and Chief Justice synthesis node.
+- `src/graph.py` – LangGraph `StateGraph` wiring Detectives and Judges with fan-out/fan-in and a basic error-handling branch.
+- `rubric/week2_rubric.json` – Automaton Auditor rubric (Constitution).
+- `reports/interim_report.pdf` – Textual interim architecture report for submission.
+- `reports/stategraph_architecture.mmd` – Mermaid diagram of the StateGraph architecture.
 
-To run the full (placeholder) swarm end-to-end against a target repo and PDF:
+### End-to-end run example
 
-```bash
-python -m src.cli \
-  --repo-url "https://github.com/your-peer/week2-repo.git" \
-  --pdf-path "path/to/report.pdf"
-```
+Assumptions:
+- You have `git` and Python 3.10+ installed.
+- You have a target Week 2 repo URL and a local PDF report path.
+
+Steps:
+
+1. Install dependencies (see above) and create `.env`.
+2. From the project root, run:
+
+   ```bash
+   python -m src.cli \
+     --repo-url "https://github.com/your-peer/week2-repo.git" \
+     --pdf-path "path/to/report.pdf" \
+     --output "audit/report_onpeer_generated/audit_report.md"
+   ```
+
+3. Open `audit/report_onpeer_generated/audit_report.md` to inspect the generated
+   (currently partially placeholder) Digital Courtroom audit report.
+
 

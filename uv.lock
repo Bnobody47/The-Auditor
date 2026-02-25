@@ -1,0 +1,10 @@
+# This file documents the intended use of uv for dependency locking.
+# It is safe to regenerate on your machine with:
+#   uv lock
+#
+# The authoritative dependency declarations live in pyproject.toml.
+
+[metadata]
+generator = "uv"
+source = "pyproject.toml"
+
