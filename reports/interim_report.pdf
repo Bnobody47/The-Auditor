@@ -1,0 +1,65 @@
+INTERIM ARCHITECTURE REPORT (TEXT PLACEHOLDER)
+
+Executive Summary
+-----------------
+This interim report documents the current design and implementation progress of the
+"Automaton Auditor" Digital Courtroom. The codebase includes typed state models
+(`Evidence`, `JudicialOpinion`, `AgentState`), sandboxed git tooling, and a LangGraph
+StateGraph wiring the Detective layer in parallel with a synchronization node.
+
+Architecture Decisions So Far
+-----------------------------
+- Pydantic over dicts:
+  - Pydantic `BaseModel` is used for `Evidence` and `JudicialOpinion` to ensure
+    strongly-typed, validated data exchanged between nodes.
+  - `AgentState` is a `TypedDict` with `Annotated` reducers (`operator.add`,
+    `operator.ior`) so parallel branches can safely merge lists and dicts.
+
+- AST & Repo Forensics:
+  - `src/tools/repo_tools.py` performs sandboxed git clone operations inside a
+    `tempfile.TemporaryDirectory` and runs `git log --oneline --reverse` to build
+    the commit narrative.
+  - Dedicated placeholders for AST-based analysis of state and graph wiring are
+    defined and will be fully implemented for the final submission.
+
+- PDF & Doc Forensics:
+  - `src/tools/doc_tools.py` defines entry points for a RAG-lite PDF ingestion
+    pipeline. Docling (or similar) will be integrated to extract text and support
+    targeted queries about Dialectical Synthesis, Fan-In/Fan-Out, and Metacognition.
+
+- Sandboxing Strategy:
+  - All git operations are executed in a temporary directory, never the live
+    working tree, to reduce security risk when cloning arbitrary repositories.
+
+StateGraph Flow (Detective Focus)
+---------------------------------
+- Entry: `context_builder` loads rubric dimensions into state.
+- Fan-out Detectives:
+  - `repo_investigator` (Code Detective)
+  - `doc_analyst` (Paperwork Detective)
+  - `vision_inspector` (Diagram Detective; currently a structural placeholder)
+- Fan-in:
+  - `evidence_aggregator` acts as the synchronization point before the judicial
+    layer. Because `evidences` uses an `operator.ior` reducer, each Detective can
+    contribute evidence without overwriting others.
+
+Known Gaps and Judicial Plan
+-----------------------------
+- RepoInvestigator:
+  - Implement AST parsing to confirm `AgentState` structure, reducers, and
+    StateGraph fan-out/fan-in wiring.
+- DocAnalyst:
+  - Implement PDF parsing and file-path extraction; cross-reference claims in the
+    report with actual repository contents to flag hallucinated paths.
+- VisionInspector:
+  - Implement image extraction and multimodal analysis to classify diagrams and
+    verify that parallel Detectives/Judges and Chief Justice synthesis are shown.
+- Judicial Layer & Chief Justice:
+  - Upgrade the current placeholder judges into LLM-backed personas using
+    structured output (`JudicialOpinion` schema).
+  - Implement deterministic ChiefJustice rules (security override, fact supremacy,
+    dissent requirement) and serialize an `AuditReport` to Markdown.
+
+NOTE: This file is stored as plain text with a `.pdf` extension for interim
+submission. It can be exported to a true PDF via your preferred tooling.
+
