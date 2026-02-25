@@ -32,6 +32,9 @@ Architecture Decisions So Far (with Trade-offs)
     false positives (e.g., comments mentioning `StateGraph`). Regex-based
     scanning was considered for speed and simplicity, but rejected because the
     rubric explicitly demands structural verification, not string presence.
+  - Future improvement: deepen AST structural checks so the tools can recognize
+    more complex patterns of graph construction and state typing, moving beyond
+    simple `add_edge` enumeration toward full architecture validation.
 
 - Sandboxed git tooling:
   - Decision: `src/tools/repo_tools.py` performs git clone operations inside a
@@ -53,6 +56,20 @@ Architecture Decisions So Far (with Trade-offs)
     cite specific sentences as Evidence. A naive single-prompt summarizer was
     rejected because it would be hard to ground specific forensic claims in
     concrete text spans.
+  - Future improvement: make the ingestion explicitly chunked and queryable in
+    code (e.g., exposing a small API for term/section lookups) so Judges can
+    pull focused contexts by rubric dimension.
+
+Forensic Tool Engineering Roadmap
+---------------------------------
+In addition to the current safe, AST-based, sandboxed tools, the near-term plan
+is to:
+- Harden git error handling and messaging so clone/log failures surface clearly
+  in Evidence and do not break the graph.
+- Extend AST visitors to check richer structural properties (e.g., parallel
+  branches, conditional edges, reducer usage) rather than only listing edges.
+- Evolve PDF tooling into a clearly queryable, chunked interface that supports
+  targeted questions from Judges and the Chief Justice.
 
 StateGraph Flow (Detective Focus)
 ---------------------------------
@@ -119,6 +136,21 @@ Sequencing and Prioritization
 4. **Enhance Diagrams and Vision**
    - Add and integrate StateGraph diagrams and VisionInspector once textual
      evidence and judicial reasoning are reliable.
+
+5. **Tighten Forensic Tooling**
+   - Deepen AST structural checks and formalize the PDF ingestion/query API so
+     Detective nodes can provide stronger, more precise Evidence to the Bench.
+
+Project Infrastructure and Reproducibility
+------------------------------------------
+The repository is designed to be reproducible using `uv` (via `pyproject.toml`)
+or `pip` (via `requirements.txt`), with `.env.example` documenting required
+environment variables. To further professionalize the project, the plan is to:
+- Add a `uv.lock` (or equivalent lockfile) so dependency resolution is fully
+  pinned and reproducible across machines.
+- Expand the README with an explicit, step-by-step end-to-end run-through,
+  including concrete example commands, expected outputs, and any assumptions
+  about installed tools (e.g., `git`, `python`, `uv`).
 
 StateGraph Architecture Diagram
 -------------------------------
