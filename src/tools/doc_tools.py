@@ -16,34 +16,51 @@ KEY_TERMS = [
 ]
 
 
+def _chunk_text(text: str, chunk_size: int = 1200, overlap: int = 150) -> List[str]:
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return []
+    chunks: List[str] = []
+    i = 0
+    while i < len(text):
+        chunks.append(text[i : i + chunk_size])
+        i += max(1, chunk_size - overlap)
+    return chunks
+
+
 def _ingest_pdf_chunks(pdf_path: Path) -> Tuple[Sequence[str], str]:
     """
     Ingest the PDF into text chunks suitable for targeted querying.
 
-    Returns (chunks, error_message). If ingestion fails, chunks will be empty
-    and error_message will describe the failure.
+    Implementation note (Windows-friendly):
+    - Default to `pypdf` to avoid heavyweight OCR/model downloads and memory errors.
+    - Returns (chunks, error_message).
     """
     try:
-        from docling.document_converter import DocumentConverter  # type: ignore[import]
-    except Exception as exc:  # Docling not installed
-        return [], f"Docling not available: {exc}"
-
-    conv = DocumentConverter()
-    try:
-        doc = conv.convert(pdf_path)
+        from pypdf import PdfReader  # type: ignore[import]
     except Exception as exc:
-        return [], f"Docling failed to parse PDF: {exc}"
+        return [], f"pypdf not available: {exc}"
 
-    chunks: List[str] = []
-    for section in getattr(doc, "sections", []):
-        text = getattr(section, "text", None)
-        if text:
-            chunks.append(text)
+    try:
+        reader = PdfReader(str(pdf_path))
+    except Exception as exc:
+        return [], f"Failed to open PDF: {exc}"
 
-    if not chunks:
-        return [], "PDF was parsed but produced no textual sections."
+    pages_text: List[str] = []
+    for idx, page in enumerate(reader.pages):
+        try:
+            t = page.extract_text() or ""
+        except Exception:
+            t = ""
+        if t.strip():
+            pages_text.append(f"[page {idx + 1}] {t.strip()}")
 
-    return chunks, ""
+    if not pages_text:
+        return [], "PDF text extraction returned no content (may be scanned images)."
+
+    joined = "\n".join(pages_text)
+    chunks = _chunk_text(joined)
+    return chunks, "" if chunks else "Chunking produced no text chunks."
 
 
 def _find_keyword_contexts(text: str, keyword: str, window: int = 120) -> List[str]:

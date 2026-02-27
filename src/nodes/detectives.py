@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from ..state import AgentState, Evidence
 from ..tools.repo_tools import (
     analyze_git_history,
     analyze_graph_structure,
     analyze_state_management,
-    analyze_tool_safety,
     analyze_structured_output_enforcement,
+    analyze_tool_safety,
+    cloned_repo,
 )
 from ..tools.doc_tools import (
     analyze_theoretical_depth,
@@ -18,9 +19,14 @@ from ..tools.doc_tools import (
 from ..tools.vision_tools import analyze_architecture_diagrams
 
 
-FOR_CODE_CRITERION = "forensic_accuracy_code"
-FOR_DOCS_CRITERION = "forensic_accuracy_docs"
-FOR_VISUAL_CRITERION = "langgraph_architecture"
+GIT_FORENSIC = "git_forensic_analysis"
+STATE_RIGOR = "state_management_rigor"
+GRAPH_ORCH = "graph_orchestration"
+SAFE_TOOLING = "safe_tool_engineering"
+STRUCTURED_OUTPUT = "structured_output_enforcement"
+THEORETICAL_DEPTH = "theoretical_depth"
+REPORT_ACCURACY = "report_accuracy"
+SWARM_VISUAL = "swarm_visual"
 
 
 def _append_evidences(
@@ -34,7 +40,7 @@ def _append_evidences(
     return evidences
 
 
-def repo_investigator_node(state: AgentState) -> AgentState:
+def repo_investigator_node(state: AgentState) -> Dict[str, Dict[str, List[Evidence]]]:
     """
     Code Detective: clones & inspects the target GitHub repository.
 
@@ -45,44 +51,48 @@ def repo_investigator_node(state: AgentState) -> AgentState:
     - Safe tool engineering
     - Structured judge outputs
     """
-    repo_url = state.get("repo_url")
-    evidences = state.get("evidences", {})
+    repo_url: Optional[str] = state.get("repo_url")
 
+    updates: Dict[str, Dict[str, List[Evidence]]] = {"evidences": {}}
     if not repo_url:
-        fallback = Evidence(
-            goal="Repository availability",
-            found=False,
-            content=None,
-            location="repo_url",
-            rationale="No repo_url provided in AgentState; RepoInvestigator could not run.",
-            confidence=0.2,
-        )
-        state["evidences"] = _append_evidences(
-            evidences=evidences,
-            criterion_id=FOR_CODE_CRITERION,
-            new_items=[fallback],
-        )
-        return state
+        updates["evidences"][GIT_FORENSIC] = [
+            Evidence(
+                goal="Repository availability",
+                found=False,
+                content=None,
+                location="repo_url",
+                rationale="No --repo-url provided; RepoInvestigator did not run.",
+                confidence=0.2,
+            )
+        ]
+        return updates
 
-    git_ev = analyze_git_history(repo_url)
-    state_ev = analyze_state_management(repo_url)
-    graph_ev = analyze_graph_structure(repo_url)
-    tool_ev = analyze_tool_safety(repo_url)
-    structured_ev = analyze_structured_output_enforcement(repo_url)
+    with cloned_repo(repo_url) as (repo_dir, err):
+        if repo_dir is None:
+            updates["evidences"][GIT_FORENSIC] = [
+                Evidence(
+                    goal="Repository clone",
+                    found=False,
+                    content=None,
+                    location=repo_url,
+                    rationale=f"Failed to clone repository in sandbox. stderr: {err[:400]}",
+                    confidence=0.2,
+                )
+            ]
+            return updates
 
-    all_evidence: List[Evidence] = (
-        git_ev + state_ev + graph_ev + tool_ev + structured_ev
-    )
+        updates["evidences"][GIT_FORENSIC] = [analyze_git_history(repo_dir)]
+        updates["evidences"][STATE_RIGOR] = [analyze_state_management(repo_dir)]
+        updates["evidences"][GRAPH_ORCH] = [analyze_graph_structure(repo_dir)]
+        updates["evidences"][SAFE_TOOLING] = [analyze_tool_safety(repo_dir)]
+        updates["evidences"][STRUCTURED_OUTPUT] = [
+            analyze_structured_output_enforcement(repo_dir)
+        ]
 
-    state["evidences"] = _append_evidences(
-        evidences=evidences,
-        criterion_id=FOR_CODE_CRITERION,
-        new_items=all_evidence,
-    )
-    return state
+    return updates
 
 
-def doc_analyst_node(state: AgentState) -> AgentState:
+def doc_analyst_node(state: AgentState) -> Dict[str, Dict[str, List[Evidence]]]:
     """
     Paperwork Detective: analyzes the architectural PDF report.
 
@@ -90,41 +100,41 @@ def doc_analyst_node(state: AgentState) -> AgentState:
     - Theoretical depth around Dialectical Synthesis, Fan-In/Fan-Out, Metacognition, etc.
     - Host analysis accuracy: verified vs hallucinated file paths.
     """
-    pdf_path = state.get("pdf_path")
-    repo_url = state.get("repo_url", "")
+    pdf_path: Optional[str] = state.get("pdf_path")
+    repo_url: str = state.get("repo_url") or ""
 
-    evidences = state.get("evidences", {})
-
+    updates: Dict[str, Dict[str, List[Evidence]]] = {"evidences": {}}
     if not pdf_path or not Path(pdf_path).exists():
-        fallback = Evidence(
-            goal="PDF report availability",
-            found=False,
-            content=None,
-            location=str(pdf_path or "pdf_path"),
-            rationale="PDF path missing or file does not exist; DocAnalyst could not inspect the report.",
-            confidence=0.2,
-        )
-        state["evidences"] = _append_evidences(
-            evidences=evidences,
-            criterion_id=FOR_DOCS_CRITERION,
-            new_items=[fallback],
-        )
-        return state
+        updates["evidences"][THEORETICAL_DEPTH] = [
+            Evidence(
+                goal="PDF report availability",
+                found=False,
+                content=None,
+                location=str(pdf_path or "pdf_path"),
+                rationale="No valid --pdf-path provided; DocAnalyst did not run.",
+                confidence=0.2,
+            )
+        ]
+        updates["evidences"][REPORT_ACCURACY] = [
+            Evidence(
+                goal="Report accuracy cross-reference",
+                found=False,
+                content=None,
+                location=str(pdf_path or "pdf_path"),
+                rationale="No valid --pdf-path provided; cannot extract claimed paths for cross-reference.",
+                confidence=0.2,
+            )
+        ]
+        return updates
 
-    theoretical_ev = analyze_theoretical_depth(pdf_path)
-    host_accuracy_ev = analyze_host_accuracy(pdf_path=pdf_path, repo_url=repo_url)
-
-    all_evidence: List[Evidence] = theoretical_ev + host_accuracy_ev
-
-    state["evidences"] = _append_evidences(
-        evidences=evidences,
-        criterion_id=FOR_DOCS_CRITERION,
-        new_items=all_evidence,
+    updates["evidences"][THEORETICAL_DEPTH] = analyze_theoretical_depth(pdf_path)
+    updates["evidences"][REPORT_ACCURACY] = analyze_host_accuracy(
+        pdf_path=pdf_path, repo_url=repo_url
     )
-    return state
+    return updates
 
 
-def vision_inspector_node(state: AgentState) -> AgentState:
+def vision_inspector_node(state: AgentState) -> Dict[str, Dict[str, List[Evidence]]]:
     """
     Diagram Detective: inspects architectural diagrams extracted from the PDF.
 
@@ -132,32 +142,23 @@ def vision_inspector_node(state: AgentState) -> AgentState:
     whether the diagrams clearly depict parallel Detectives/Judges and Chief Justice
     synthesis, or just a linear pipeline.
     """
-    pdf_path = state.get("pdf_path")
-    evidences = state.get("evidences", {})
+    pdf_path: Optional[str] = state.get("pdf_path")
+    updates: Dict[str, Dict[str, List[Evidence]]] = {"evidences": {}}
 
     if not pdf_path or not Path(pdf_path).exists():
-        fallback = Evidence(
-            goal="Diagram availability",
-            found=False,
-            content=None,
-            location=str(pdf_path or "pdf_path"),
-            rationale="PDF path missing or file does not exist; VisionInspector could not extract diagrams.",
-            confidence=0.1,
-        )
-        state["evidences"] = _append_evidences(
-            evidences=evidences,
-            criterion_id=FOR_VISUAL_CRITERION,
-            new_items=[fallback],
-        )
-        return state
+        updates["evidences"][SWARM_VISUAL] = [
+            Evidence(
+                goal="Diagram availability",
+                found=False,
+                content=None,
+                location=str(pdf_path or "pdf_path"),
+                rationale="No valid --pdf-path provided; VisionInspector did not run.",
+                confidence=0.1,
+            )
+        ]
+        return updates
 
-    visual_ev = analyze_architecture_diagrams(pdf_path)
-
-    state["evidences"] = _append_evidences(
-        evidences=evidences,
-        criterion_id=FOR_VISUAL_CRITERION,
-        new_items=visual_ev,
-    )
-    return state
+    updates["evidences"][SWARM_VISUAL] = analyze_architecture_diagrams(pdf_path)
+    return updates
 
 

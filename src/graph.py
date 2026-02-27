@@ -25,6 +25,11 @@ def _evidence_health_router(state: AgentState) -> str:
     return "ok" if has_any else "missing_evidence"
 
 
+def judge_fanout_node(_: AgentState) -> dict:
+    """No-op node used to support conditional -> parallel fan-out."""
+    return {}
+
+
 def build_graph() -> StateGraph[AgentState]:
     """
     Construct the Automaton Auditor LangGraph.
@@ -51,6 +56,7 @@ def build_graph() -> StateGraph[AgentState]:
     graph.add_node("doc_analyst", doc_analyst_node)
     graph.add_node("vision_inspector", vision_inspector_node)
     graph.add_node("evidence_aggregator", evidence_aggregator_node)
+    graph.add_node("judge_fanout", judge_fanout_node)
     graph.add_node("prosecutor", prosecutor_node)
     graph.add_node("defense", defense_node)
     graph.add_node("tech_lead", tech_lead_node)
@@ -76,15 +82,15 @@ def build_graph() -> StateGraph[AgentState]:
         "evidence_aggregator",
         _evidence_health_router,
         {
-            "ok": "prosecutor",
+            "ok": "judge_fanout",
             "missing_evidence": "chief_justice",
         },
     )
 
     # Fan-out to Judges (normal path)
-    graph.add_edge("evidence_aggregator", "prosecutor")
-    graph.add_edge("evidence_aggregator", "defense")
-    graph.add_edge("evidence_aggregator", "tech_lead")
+    graph.add_edge("judge_fanout", "prosecutor")
+    graph.add_edge("judge_fanout", "defense")
+    graph.add_edge("judge_fanout", "tech_lead")
 
     # Fan-in at Chief Justice and terminate
     graph.add_edge("prosecutor", "chief_justice")

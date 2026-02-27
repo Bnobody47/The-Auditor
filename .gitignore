@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+.venv/
+env/
+venv/
+
+# Environment / secrets
+.env
+.env.*
+
+
+# uv / build artifacts
+.python_packages/
+dist/
+build/
+

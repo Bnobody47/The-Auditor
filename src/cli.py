@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 
 from .graph import get_compiled_graph
 
 
-def run_audit(repo_url: str, pdf_path: str, output_path: Path) -> Path:
+def run_audit(repo_url: Optional[str], pdf_path: Optional[str], output_path: Path) -> Path:
     """Run the Automaton Auditor graph and write the Markdown report."""
     load_dotenv()  # load API keys and LANGCHAIN_TRACING_V2, if set
 
@@ -21,11 +21,12 @@ def run_audit(repo_url: str, pdf_path: str, output_path: Path) -> Path:
         "rubric_dimensions": [],
         "evidences": {},
         "opinions": [],
-        "final_report": "",
+        "final_report": None,
+        "final_report_markdown": "",
     }
 
     result = graph.invoke(initial_state)
-    report = result.get("final_report", "")
+    report = result.get("final_report_markdown", "")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(report, encoding="utf-8")
@@ -38,13 +39,15 @@ def main() -> None:
     )
     parser.add_argument(
         "--repo-url",
-        required=True,
-        help="GitHub repository URL to audit (e.g. https://github.com/user/week2-repo.git)",
+        required=False,
+        help="GitHub repository URL to audit (e.g. https://github.com/user/week2-repo.git). "
+        "If omitted, only documentation/diagram detectives will run.",
     )
     parser.add_argument(
         "--pdf-path",
-        required=True,
-        help="Path to the architectural PDF report associated with the repo.",
+        required=False,
+        help="Path to the architectural PDF report associated with the repo. "
+        "If omitted, only code detectives will run.",
     )
     parser.add_argument(
         "--output",
@@ -53,6 +56,10 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    if not args.repo_url and not args.pdf_path:
+        parser.error("You must provide at least one of --repo-url or --pdf-path.")
+
     output_path = Path(args.output)
     final_path = run_audit(args.repo_url, args.pdf_path, output_path)
     print(f"Audit report written to: {final_path}")

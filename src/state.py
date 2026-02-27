@@ -1,4 +1,5 @@
 import operator
+import uuid
 from typing import Annotated, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -8,6 +9,10 @@ from typing_extensions import TypedDict
 class Evidence(BaseModel):
     """A single, objective piece of forensic evidence."""
 
+    evidence_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description="Unique identifier for citations and cross-referencing.",
+    )
     goal: str = Field(
         ...,
         description="What this evidence was trying to verify (e.g., 'Graph fan-out present').",
@@ -63,6 +68,28 @@ class JudicialOpinion(BaseModel):
     )
 
 
+class CriterionResult(BaseModel):
+    dimension_id: str = Field(..., description="Rubric dimension ID.")
+    dimension_name: str = Field(..., description="Human-readable dimension name.")
+    final_score: int = Field(..., ge=1, le=5, description="Final resolved score.")
+    judge_opinions: List[JudicialOpinion] = Field(default_factory=list)
+    dissent_summary: Optional[str] = Field(
+        default=None, description="Required when judge score variance > 2."
+    )
+    remediation: str = Field(
+        ...,
+        description="Specific file-level instructions for improving this criterion.",
+    )
+
+
+class AuditReport(BaseModel):
+    repo_url: Optional[str] = Field(default=None)
+    executive_summary: str = Field(...)
+    overall_score: float = Field(..., description="Average across final scores.")
+    criteria: List[CriterionResult] = Field(default_factory=list)
+    remediation_plan: str = Field(...)
+
+
 class AgentState(TypedDict):
     """
     Global LangGraph state for the Automaton Auditor.
@@ -72,8 +99,8 @@ class AgentState(TypedDict):
     """
 
     # Inputs
-    repo_url: str
-    pdf_path: str
+    repo_url: Optional[str]
+    pdf_path: Optional[str]
 
     # Loaded from rubric/week2_rubric.json at runtime
     rubric_dimensions: List[Dict]
@@ -84,6 +111,7 @@ class AgentState(TypedDict):
     # Judicial outputs from the Prosecutor, Defense, and Tech Lead judges.
     opinions: Annotated[List[JudicialOpinion], operator.add]
 
-    # Final Markdown audit report produced by the Chief Justice.
-    final_report: str
+    # Final structured report and a rendered Markdown string.
+    final_report: Optional[AuditReport]
+    final_report_markdown: str
 

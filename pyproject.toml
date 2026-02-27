@@ -6,9 +6,13 @@ requires-python = ">=3.10"
 dependencies = [
     "langgraph",
     "langchain-core",
+    "langchain-openai",
+    "langchain-groq",
+    "langchain-google-genai",
     "pydantic>=2.0.0",
     "typing_extensions>=4.8.0",
     "docling",
+    "pypdf",
     "python-dotenv",
     "tenacity",
     "requests",
