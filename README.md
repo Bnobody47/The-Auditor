@@ -68,7 +68,15 @@ Assumptions:
 Steps:
 
 1. Install dependencies (see above) and create `.env`.
-2. From the project root, run:
+2. Run the web app (recommended):
+
+   ```bash
+   py -m uv run main.py
+   ```
+
+   Then open `http://localhost:8000` and submit your repo URL and/or PDF path/URL.
+
+3. Or run from the CLI:
 
    ```bash
    python -m src.cli \
@@ -77,7 +85,7 @@ Steps:
      --output "audit/report_onpeer_generated/audit_report.md"
    ```
 
-3. Open `audit/report_onpeer_generated/audit_report.md` to inspect the generated
+4. Open `audit/report_onpeer_generated/audit_report.md` to inspect the generated
    (currently partially placeholder) Digital Courtroom audit report.
 
 
