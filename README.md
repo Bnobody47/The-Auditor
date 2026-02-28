@@ -53,7 +53,9 @@ report.
 - `src/graph.py` – LangGraph `StateGraph` wiring Detectives and Judges with fan-out/fan-in and a basic error-handling branch.
 - `rubric/week2_rubric.json` – Automaton Auditor rubric (Constitution).
 - `reports/interim_report.pdf` – Textual interim architecture report for submission.
+- `reports/final_report.md` – Final submission report (Markdown). Export to PDF for submission (see below).
 - `reports/stategraph_architecture.mmd` – Mermaid diagram of the StateGraph architecture.
+- `scripts/generate_final_pdf.py` – Script to generate `reports/final_report.pdf` from the Markdown (requires `pandoc` or `pypandoc`).
 - `pyproject.toml` – Primary dependency and project metadata (used by `uv`).
 - `requirements.txt` – Flat dependency list for `pip` users.
 - `uv.lock` – Lockfile for reproducible installs with `uv`.
@@ -86,6 +88,38 @@ Steps:
    ```
 
 4. Open `audit/report_onpeer_generated/audit_report.md` to inspect the generated
-   (currently partially placeholder) Digital Courtroom audit report.
+   Digital Courtroom audit report.
+
+### Generating the final report PDF
+
+To produce `reports/final_report.pdf` for submission:
+
+1. Install [pandoc](https://pandoc.org) (e.g. `winget install pandoc` on Windows).
+2. Run:
+
+   ```bash
+   python scripts/generate_final_pdf.py
+   ```
+
+   Or manually: `pandoc reports/final_report.md -o reports/final_report.pdf`
+
+   Alternatively, open `reports/final_report.md` in VS Code and use the “Markdown PDF” extension to export to PDF.
+
+### Docker (optional)
+
+Build and run the auditor in a container:
+
+```bash
+docker build -t automaton-auditor .
+docker run -p 8000:8000 --env-file .env automaton-auditor
+```
+
+Then open `http://localhost:8000`. To run a one-off audit via CLI inside the container, use:
+
+```bash
+docker run --rm --env-file .env automaton-auditor python -m src.cli --repo-url "https://github.com/..." --pdf-path "/path/in/container/report.pdf" --output /tmp/audit.md
+```
+
+Mount a volume if the PDF is on the host: e.g. `-v "%cd%\reports:/reports"` and pass `--pdf-path /reports/report.pdf`.
 
 
